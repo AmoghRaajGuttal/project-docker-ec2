@@ -1,22 +1,30 @@
 name: Build and Deploy to EC2
 
-# Ensure proper permissions (optional but safe)
-permissions:
-  contents: read
-  packages: write
-
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build-and-push:
+    name: Build & Push Docker image
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Set up QEMU (for buildx)
+      - name: Show repo files (debug)
+        run: |
+          echo "=== Repo root listing ==="
+          ls -la .
+          echo "=== Recursive listing (short) ==="
+          ls -laR .
+
+      - name: Set up QEMU (for multi-arch, optional)
         uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
@@ -28,28 +36,40 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build and push image with buildx
+        id: build
         uses: docker/build-push-action@v4
         with:
-          context: ./cloud-demo          # <-- change if your context is different
-          file: ./docker/Dockerfile      # <-- path to Dockerfile
+          context: .
+          file: docker/Dockerfile                  # explicitly use docker/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}
-          # platforms: linux/amd64,linux/arm64   # optional
+          output: type=registry
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:buildcache || true
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:buildcache,mode=max || true
 
   deploy:
+    name: Deploy to EC2
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Wait a bit to ensure image is available
+        run: sleep 3
+
       - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v0.1.8
+        uses: appleboy/ssh-action@v1.1.10
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
           script: |
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}
-            docker stop cloud-demo || true
-            docker rm cloud-demo || true
-            docker run -d -p 80:5000 --name cloud-demo \
-              ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}
+            set -e
+            echo "Pulling image..."
+            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}
+            echo "Stopping existing container (if any)..."
+            sudo docker stop cloud-demo || true
+            sudo docker rm cloud-demo || true
+            echo "Running container..."
+            sudo docker run -d -p 80:5000 --name cloud-demo ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}
+            echo "Done."
