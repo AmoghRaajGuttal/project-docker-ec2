@@ -11,3 +11,4 @@ pushes it to Docker Hub, and deploys it to an AWS EC2 instance.
 - Nginx and deployment configs
 
 ## 🧱 Project Structure
+#
