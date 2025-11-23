@@ -1,65 +1,55 @@
 name: Build and Deploy to EC2
 
+# Ensure proper permissions (optional but safe)
+permissions:
+  contents: read
+  packages: write
+
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    outputs:
-      image-ref: ${{ steps.set-image.outputs.image-ref }}
-
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
+      - name: Set up QEMU (for buildx)
         uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Login to DockerHub
+      - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push image
-        id: build
         uses: docker/build-push-action@v4
         with:
-          context: .
-          file: docker/Dockerfile
+          context: ./cloud-demo          # <-- change if your context is different
+          file: ./docker/Dockerfile      # <-- path to Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}
-
-      - name: Set image output
-        id: set-image
-        run: echo "::set-output name=image-ref::${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}"
+          # platforms: linux/amd64,linux/arm64   # optional
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to EC2 over SSH
-        uses: appleboy/ssh-action@v1.1.2
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v0.1.8
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          timeout: 30
           script: |
-            set -e
-            echo "Pulling image..."
-            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}
-            echo "Stopping old container (if any)..."
-            sudo docker stop cloud-demo || true
-            sudo docker rm cloud-demo || true
-            echo "Starting container..."
-            sudo docker run -d -p 80:5000 --name cloud-demo --restart unless-stopped \
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}
+            docker stop cloud-demo || true
+            docker rm cloud-demo || true
+            docker run -d -p 80:5000 --name cloud-demo \
               ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.CONTAINER_NAME }}:${{ secrets.DOCKER_IMAGE_TAG }}
-            echo "Done deploy"
