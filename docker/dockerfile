@@ -1,19 +1,21 @@
 FROM python:3.10-slim
 
+# Install OS packages required for pip + CA certs (if needed)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates build-essential && \
+    apt-get install -y --no-install-recommends ca-certificates build-essential wget && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY app/requirements.txt .
+# Copy requirements and install (context root must include cloud-demo/app/requirements.txt)
+COPY cloud-demo/app/requirements.txt .
 
-# --- FIX: bypass SSL verification for PyPI ---
-RUN python -m pip install --upgrade pip setuptools wheel --trusted-host pypi.org --trusted-host files.pythonhosted.org --no-cache-dir
-RUN pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org --no-cache-dir -r requirements.txt
+RUN python -m pip install --upgrade pip setuptools wheel --trusted-host pypi.org --trusted-host files.pythonhosted.org --no-cache-dir && \
+    pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org --no-cache-dir -r requirements.txt
 
-COPY app/ /app
+# Copy app code (from repo root)
+COPY cloud-demo/app/ /app
 
 EXPOSE 5000
 CMD ["python", "app.py"]
