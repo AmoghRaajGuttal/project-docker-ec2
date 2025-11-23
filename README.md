@@ -1,15 +1,36 @@
-# Cloud Demo App — Docker + EC2 Deployment
+# Cloud Demo App — Docker + GitHub Actions → AWS EC2
 
-This project packages a small Python Flask application into a Docker image,
-pushes it to Docker Hub, and deploys it to an AWS EC2 instance.
+A simple Flask web app packaged in Docker, automatically built and deployed to an AWS EC2 instance via GitHub Actions.
 
-## 🚀 Features
-- Python Flask API (`/cloud-demo`)
-- Dockerized application (`Dockerfile`)
-- Image pushed to Docker Hub
-- Deployment on AWS EC2 using Docker
-- Nginx and deployment configs
+**Status:** ✅ Deployed (via GitHub Actions)
 
-## 🧱 Project Structure
-#
+---
 
+## Overview
+
+This project demonstrates a small end-to-end DevOps workflow:
+
+- Containerize a Python/Flask app using Docker.
+- Build and push Docker images to DockerHub.
+- Deploy the Docker image onto an AWS EC2 instance using GitHub Actions (SSH).
+- Automatic redeploy on `main` branch pushes.
+
+---
+
+## Repo layout
+
+├─ cloud-demo/
+│ └─ app/
+│ ├─ app.py
+│ └─ requirements.txt
+├─ docker/
+│ └─ Dockerfile
+├─ nginx/
+│ └─ default.conf
+├─ deploy/
+│ └─ deploy.sh
+├─ .github/
+│ └─ workflows/
+│ └─ deploy.yml
+├─ .gitignore
+└─ README.md
